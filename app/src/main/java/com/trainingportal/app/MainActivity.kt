@@ -7,15 +7,22 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
+import android.view.Gravity
+import android.view.ViewGroup
+import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.JsResult
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.widget.FrameLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,16 +31,12 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
 
-/**
- * Training Portal — runs the portal pages (index / ST / SEPCO / RTO ...) bundled in assets/www
- * inside a WebView served from https://appassets.androidplatform.net/assets/www/ so that
- * localStorage (portal_user, portal_role ...) and relative links (index.html -> SEPCO.html) work exactly like the web.
- * All data still comes from your Apps Script Web App, so the app always shows live data.
- */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var web: WebView
     private lateinit var swipe: SwipeRefreshLayout
+    private lateinit var debugBox: TextView
+    private val debugLines = ArrayDeque<String>()
     private var fileCallback: ValueCallback<Array<Uri>>? = null
 
     private val fileChooser = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
@@ -42,20 +45,40 @@ class MainActivity : AppCompatActivity() {
         fileCallback = null
     }
 
+    private fun debug(line: String) {
+        runOnUiThread {
+            debugLines.addLast(line.take(220))
+            while (debugLines.size > 6) debugLines.removeFirst()
+            debugBox.text = debugLines.joinToString("\n")
+            debugBox.visibility = android.view.View.VISIBLE
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         web = WebView(this)
         swipe = SwipeRefreshLayout(this).apply {
-            addView(web)
+            addView(web, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             setColorSchemeColors(0xFF2563EB.toInt())
             setProgressBackgroundColorSchemeColor(0xFF101828.toInt())
             setOnRefreshListener { web.reload() }
         }
-        setContentView(swipe)
+        debugBox = TextView(this).apply {
+            setTextColor(0xFFFFFFFF.toInt())
+            setBackgroundColor(0xDDB91C1C.toInt())
+            textSize = 10f
+            setPadding(16, 10, 16, 10)
+            visibility = android.view.View.GONE
+            setOnClickListener { visibility = android.view.View.GONE; debugLines.clear() }
+        }
+        val root = FrameLayout(this).apply {
+            addView(swipe, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            addView(debugBox, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+        }
+        setContentView(root)
 
-        // "/assets/" maps to the app's assets folder: /assets/www/index.html -> assets/www/index.html
         val loader = WebViewAssetLoader.Builder()
             .setDomain(HOST)
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
@@ -70,9 +93,11 @@ class MainActivity : AppCompatActivity() {
             mediaPlaybackRequiresUserGesture = false
             mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             cacheMode = WebSettings.LOAD_DEFAULT
+            loadWithOverviewMode = true
             setSupportZoom(false)
             builtInZoomControls = false
         }
+        WebView.setWebContentsDebuggingEnabled(true)
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
 
@@ -82,17 +107,32 @@ class MainActivity : AppCompatActivity() {
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val u = request.url
-                if (u.host == HOST) return false                 // internal pages
+                if (u.host == HOST) return false
                 return try { startActivity(Intent(Intent.ACTION_VIEW, u)); true } catch (e: Exception) { true }
             }
 
             override fun onPageFinished(view: WebView, url: String) {
                 swipe.isRefreshing = false
+                debug("LOADED " + url.substringAfterLast('/'))
+            }
+
+            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                if (request.isForMainFrame) debug("NET ERR " + request.url + " : " + error.description)
+            }
+
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                debug("RENDER PROCESS CRASHED (crash=" + detail.didCrash() + ")")
+                return true
             }
         }
 
         web.webChromeClient = object : WebChromeClient() {
-            // The portal uses alert() / confirm() a lot — WebView swallows them unless we show them.
+            override fun onConsoleMessage(m: ConsoleMessage): Boolean {
+                if (m.messageLevel() == ConsoleMessage.MessageLevel.ERROR)
+                    debug("JS: " + m.message() + " @" + m.sourceId().substringAfterLast('/') + ":" + m.lineNumber())
+                return true
+            }
+
             override fun onJsAlert(view: WebView, url: String, message: String, result: JsResult): Boolean {
                 AlertDialog.Builder(this@MainActivity).setMessage(message)
                     .setPositiveButton("OK") { _, _ -> result.confirm() }
