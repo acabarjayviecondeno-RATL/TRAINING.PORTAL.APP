@@ -8,15 +8,14 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.JsResult
-import android.webkit.RenderProcessGoneDetail
 import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -36,7 +35,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var web: WebView
     private lateinit var swipe: SwipeRefreshLayout
     private lateinit var debugBox: TextView
-    private val debugLines = ArrayDeque<String>()
+    private val debugLines = ArrayList<String>()
     private var fileCallback: ValueCallback<Array<Uri>>? = null
 
     private val fileChooser = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
@@ -47,10 +46,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun debug(line: String) {
         runOnUiThread {
-            debugLines.addLast(line.take(220))
-            while (debugLines.size > 6) debugLines.removeFirst()
+            debugLines.add(line.take(220))
+            while (debugLines.size > 6) debugLines.removeAt(0)
             debugBox.text = debugLines.joinToString("\n")
-            debugBox.visibility = android.view.View.VISIBLE
+            debugBox.visibility = View.VISIBLE
         }
     }
 
@@ -70,8 +69,8 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(0xDDB91C1C.toInt())
             textSize = 10f
             setPadding(16, 10, 16, 10)
-            visibility = android.view.View.GONE
-            setOnClickListener { visibility = android.view.View.GONE; debugLines.clear() }
+            visibility = View.GONE
+            setOnClickListener { visibility = View.GONE; debugLines.clear() }
         }
         val root = FrameLayout(this).apply {
             addView(swipe, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -93,7 +92,6 @@ class MainActivity : AppCompatActivity() {
             mediaPlaybackRequiresUserGesture = false
             mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             cacheMode = WebSettings.LOAD_DEFAULT
-            loadWithOverviewMode = true
             setSupportZoom(false)
             builtInZoomControls = false
         }
@@ -114,15 +112,6 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView, url: String) {
                 swipe.isRefreshing = false
                 debug("LOADED " + url.substringAfterLast('/'))
-            }
-
-            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                if (request.isForMainFrame) debug("NET ERR " + request.url + " : " + error.description)
-            }
-
-            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-                debug("RENDER PROCESS CRASHED (crash=" + detail.didCrash() + ")")
-                return true
             }
         }
 
