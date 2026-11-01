@@ -26,7 +26,7 @@ import androidx.webkit.WebViewClientCompat
 
 /**
  * Training Portal — runs the portal pages (index / ST / SEPCO / RTO ...) bundled in assets/www
- * inside a WebView served from https://appassets.androidplatform.net/www/ so that
+ * inside a WebView served from https://appassets.androidplatform.net/assets/www/ so that
  * localStorage (portal_user, portal_role ...) and relative links (index.html -> SEPCO.html) work exactly like the web.
  * All data still comes from your Apps Script Web App, so the app always shows live data.
  */
@@ -55,9 +55,10 @@ class MainActivity : AppCompatActivity() {
         }
         setContentView(swipe)
 
+        // "/assets/" maps to the app's assets folder: /assets/www/index.html -> assets/www/index.html
         val loader = WebViewAssetLoader.Builder()
             .setDomain(HOST)
-            .addPathHandler("/www/", WebViewAssetLoader.AssetsPathHandler(this))
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
             .build()
 
         web.settings.apply {
@@ -146,7 +147,7 @@ class MainActivity : AppCompatActivity() {
         })
 
         if (savedInstanceState != null) web.restoreState(savedInstanceState)
-        else web.loadUrl("https://$HOST/www/index.html")
+        else web.loadUrl("https://$HOST/assets/www/index.html")
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
