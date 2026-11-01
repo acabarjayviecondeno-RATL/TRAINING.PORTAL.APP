@@ -1,0 +1,10 @@
+<resources>
+    <color name="icon_bg">#2563EB</color>
+    <color name="portal_bg">#090E1C</color>
+    <style name="Theme.TrainingPortal" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/portal_bg</item>
+        <item name="android:statusBarColor">@color/portal_bg</item>
+        <item name="android:navigationBarColor">@color/portal_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
